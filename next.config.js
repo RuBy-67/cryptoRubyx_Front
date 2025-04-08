@@ -9,6 +9,11 @@ const nextConfig = {
     ];
     return config;
   },
+  // Configuration du serveur
+  server: {
+    port: process.env.PORT || 443, // Port par défaut 443 (HTTPS), sinon utilise la variable d'environnement PORT
+    https: true, // Force HTTPS
+  },
 }
 
 module.exports = nextConfig 
