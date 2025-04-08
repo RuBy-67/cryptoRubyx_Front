@@ -18,7 +18,7 @@ export default function LoginPage() {
     setError('');
 
     try {
-      const response = await fetch('https://api.rb-rubydev.fr/api/auth/login', {
+      const response = await fetch('http://localhost:3001/api/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -50,14 +50,16 @@ export default function LoginPage() {
     <div className="min-h-screen bg-black text-white grid-bg">
       {/* Logo et titre */}
       <div className="absolute top-8 left-8">
-        <Image
-          src="/logos/logoWithTxtWithoutBg.png"
-          alt="CryptoRubyx"
-          width={180}
-          height={48}
-          priority
-          unoptimized
-        />
+        <Link href="/">
+          <Image
+            src="/logos/logoWithTxtWithoutBg.png"
+            alt="CryptoRubyx"
+            width={180}
+            height={48}
+            priority
+            unoptimized
+          />
+        </Link>
       </div>
 
       {/* Formulaire de connexion */}

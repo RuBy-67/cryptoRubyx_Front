@@ -35,13 +35,14 @@ interface TokenBalance {
   type: string;
   symbol: string;
   name?: string;
-  balance: number;
+  balance: string | number; // Peut être string (formaté) ou number (raw)
   address: string;
   decimals?: number;
   wallets?: string[];
   marketData?: TokenMarketData;
   transactions?: any[];
   displayBalance?: string;
+  rawBalance?: string; // Important pour SOL et SPL
 }
 
 interface WalletBalance {
@@ -134,31 +135,39 @@ const formatNumber = (num: number, forceDecimals: boolean = false): string => {
   if (Number.isInteger(num) && !forceDecimals) {
     return num.toString();
   }
-  return num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  // Utiliser maximumFractionDigits 8 pour plus de précision si nécessaire
+  return num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 8 });
 };
 
 const formatTokenBalance = (balance: string | number, decimals: number = 18, symbol: string = ''): string => {
-  const value = typeof balance === 'string' ? balance : balance.toString();
+  const numericBalance = Number(balance); // Convertir en nombre au début
   
-  // Cas spécial pour Solana
-  if (symbol === 'SOL') {
-    const normalizedBalance = Number(value);
-    const isInteger = Number.isInteger(normalizedBalance);
-    return isInteger ? normalizedBalance.toString() : normalizedBalance.toFixed(4).replace(/\.?0+$/, '');
+  if (isNaN(numericBalance)) {
+    // Si la conversion échoue, essayer de voir si c'était une chaîne déjà formatée
+    if (typeof balance === 'string' && balance.includes('.')) return balance;
+    return "0"; // Retourner 0 si invalide
   }
   
-  const normalizedBalance = Number(value) / Math.pow(10, decimals);
+  // Pour tous les tokens (SOL, ETH, SPL, ERC20), 
+  // la balance est maintenant numérique et correcte (pas besoin de re-diviser)
+  // On formate juste le nombre pour l'affichage
   
-  if (normalizedBalance < 0.000001) {
-    return normalizedBalance.toExponential(4);
+  // Choisir le nombre de décimales à afficher (plus pour SOL/ETH)
+  const displayDecimals = (symbol === 'SOL' || symbol === 'ETH') ? 8 : 4;
+  
+  // Utiliser toFixed pour contrôler précisément les décimales et éviter la notation scientifique
+  let formatted = numericBalance.toFixed(displayDecimals);
+  
+  // Supprimer les zéros inutiles à la fin, mais garder au moins 2 décimales si non entier
+  formatted = formatted.replace(/\.?0+$/, '');
+  if (formatted.includes('.') && formatted.split('.')[1].length < 2) {
+     formatted = Number(formatted).toFixed(2); // Assurer au moins 2 décimales si nécessaire
   }
-  
-  if (normalizedBalance > 1) {
-    const isInteger = Number.isInteger(normalizedBalance);
-    return isInteger ? normalizedBalance.toString() : normalizedBalance.toFixed(4);
+  if (!formatted.includes('.') && numericBalance !== 0 && Math.abs(numericBalance) < 0.01) {
+      formatted = numericBalance.toFixed(displayDecimals); // Rétablir si très petit et formaté à 0
   }
-  
-  return normalizedBalance.toFixed(8);
+
+  return formatted;
 };
 
 // Ajouter cette fonction de filtrage des NFTs après les interfaces
@@ -171,6 +180,46 @@ const shouldDisplayNFT = (nft: NFT): boolean => {
   return !excludedTerms.some(term => 
     name.includes(term) || symbol.includes(term)
   );
+};
+
+// Nouvelle fonction pour calculer la valeur correcte d'un wallet
+const calculateCorrectWalletValue = (wallet: Wallet): number => {
+  if (!wallet.balance?.balances) return 0;
+
+  return wallet.balance.balances.reduce((total, token) => {
+    if (!token.marketData?.price || token.marketData.price <= 0) return total;
+
+    let numericBalance = 0;
+    let value = 0; // Initialiser la valeur à 0
+
+    try {
+      if (token.type === 'NATIVE' && token.symbol === 'SOL') {
+        // Utiliser rawBalance pour SOL
+        numericBalance = token.rawBalance ? Number(token.rawBalance) / Math.pow(10, 9) : 0;
+        value = numericBalance * token.marketData.price;
+      } else if (token.type === 'NATIVE' && token.symbol === 'ETH') {
+        // Utiliser balance (brute) pour ETH
+        numericBalance = Number(token.balance) / Math.pow(10, 18);
+        value = numericBalance * token.marketData.price;
+      } else if (token.type === 'SPL' || token.type === 'ERC20') {
+        // Utiliser token.balance (qui semble être le nombre formaté correct)
+        numericBalance = Number(token.balance);
+        if (!isNaN(numericBalance)) {
+          value = numericBalance * token.marketData.price;
+        } else {
+          value = 0; // Mettre 0 si la conversion échoue
+        }
+      } else {
+        // Autres types ou cas non gérés (ex: NFT_COLLECTION) sont ignorés
+        value = 0;
+      }
+    } catch (e) {
+      console.error(`Erreur de calcul de valeur pour ${token.symbol}:`, e, token);
+      value = 0; // Mettre 0 en cas d'erreur
+    }
+
+    return total + (isNaN(value) ? 0 : value); // Ajouter la valeur calculée au total
+  }, 0);
 };
 
 export default function DashboardPage() {
@@ -201,47 +250,9 @@ export default function DashboardPage() {
   const getTokenSummary = useCallback(() => {
     const tokenMap = new Map<string, TokenBalance>();
     
-    // D'abord, compter tous les NFTs
-    let totalNFTs = 0;
-    let nftFloorPrice = 0;
-    let nftFloorPriceUsd = 0;
-
-    wallets.forEach(wallet => {
-      if (wallet.balance?.nfts) {
-        const validNfts = wallet.balance.nfts.filter(nft => 
-          nft.type === 'ERC721' && shouldDisplayNFT(nft)
-        );
-        totalNFTs += validNfts.length;
-        
-        if (validNfts.length > 0 && !nftFloorPrice) {
-          nftFloorPrice = validNfts[0].floorPrice || 0;
-          nftFloorPriceUsd = validNfts[0].floorPriceUsd || 0;
-        }
-      }
-    });
-
-    // Créer un token virtuel pour les NFTs si on en a
-    if (totalNFTs > 0) {
-      tokenMap.set('NFT_COLLECTION', {
-        type: 'NFT_COLLECTION',
-        symbol: 'NFTs',
-        name: 'NFT Collection',
-        balance: totalNFTs,
-        address: 'virtual_nft_collection',
-        marketData: {
-          price: nftFloorPrice,
-          percent_change_24h: 0,
-          market_cap: 0,
-          volume_24h: 0,
-          last_updated: new Date().toISOString()
-        }
-      });
-    }
-
-    // Ajouter les autres tokens
     wallets.forEach(wallet => {
       if (wallet.balance?.balances) {
-        wallet.balance.balances.forEach((token: TokenBalance) => {
+        wallet.balance.balances.forEach((token: TokenBalance & { rawBalance?: string }) => {
           if (token.type !== 'NFT_COLLECTION') {
             const isBanned = bannedTokens.some(bannedToken => 
               bannedToken.address.toLowerCase() === token.address.toLowerCase()
@@ -252,22 +263,34 @@ export default function DashboardPage() {
             const key = token.symbol;
             if (tokenMap.has(key)) {
               const existingToken = tokenMap.get(key)!;
-              const balance = token.type === 'NATIVE' && token.symbol === 'SOL'
-                ? Number(token.balance)
-                : Number(token.balance) / Math.pow(10, Number(token.decimals || 18));
-              existingToken.balance = Number(existingToken.balance) + balance;
+              let balanceToAdd;
+              if (token.type === 'NATIVE' && token.symbol === 'SOL' && token.rawBalance) {
+                balanceToAdd = Number(token.rawBalance) / Math.pow(10, 9);
+              } else if (token.type === 'NATIVE' && token.symbol === 'ETH') {
+                balanceToAdd = Number(token.balance) / Math.pow(10, 18);
+              } else {
+                balanceToAdd = Number(token.balance);
+              }
+              
+              existingToken.balance = Number(existingToken.balance) + balanceToAdd;
               if (!existingToken.wallets?.includes(wallet.name)) {
                 existingToken.wallets = existingToken.wallets || [];
                 existingToken.wallets.push(wallet.name);
               }
               existingToken.marketData = token.marketData;
             } else {
-              const balance = token.type === 'NATIVE' && token.symbol === 'SOL'
-                ? Number(token.balance)
-                : Number(token.balance) / Math.pow(10, Number(token.decimals || 18));
+              let initialBalance;
+              if (token.type === 'NATIVE' && token.symbol === 'SOL' && token.rawBalance) {
+                initialBalance = Number(token.rawBalance) / Math.pow(10, 9);
+              } else if (token.type === 'NATIVE' && token.symbol === 'ETH') {
+                initialBalance = Number(token.balance) / Math.pow(10, 18);
+              } else {
+                initialBalance = Number(token.balance);
+              }
+              
               tokenMap.set(key, {
                 ...token,
-                balance,
+                balance: initialBalance,
                 wallets: [wallet.name]
               });
             }
@@ -281,7 +304,6 @@ export default function DashboardPage() {
 
   // Modifier la partie qui gère l'affichage des tokens pour supporter le token virtuel NFT
   const getFilteredAndSortedTokens = useCallback(() => {
-    // Récupérer les tokens standards
     const tokens = getTokenSummary();
     
     // Filtrer les tokens selon la recherche et le prix
@@ -306,19 +328,27 @@ export default function DashboardPage() {
         // Pour les autres tokens, vérifier le prix
         const hasValidPrice = token.marketData?.price && token.marketData.price > 0;
         return hasValidPrice && matchesSearch;
+    }).map(token => {
+        // La balance numérique est maintenant correctement calculée dans getTokenSummary
+        // On utilise formatTokenBalance pour l'affichage
+        return {
+          ...token,
+          // Utilise la balance numérique et les décimales correctes
+          displayBalance: formatTokenBalance(token.balance, token.decimals, token.symbol)
+        };
     });
 
     // Trier les tokens
     return filteredTokens.sort((a, b) => {
         let comparison = 0;
         const getTokenValue = (token: TokenBalance) => {
+            // Utiliser la balance numérique (calculée dans getTokenSummary) pour la valeur
             if (token.type === 'NFT_COLLECTION') {
-                return (token.balance * (token.marketData?.price || 0) * 380.23);
+                return (Number(token.balance) * (token.marketData?.price || 0) * 380.23); // Approximation pour NFTs
             }
-            if (token.type === 'NATIVE' && token.symbol === 'SOL') {
-                return token.balance * (token.marketData?.price || 0);
-            }
-            return token.marketData?.price ? token.balance * token.marketData.price : 0;
+            // Pour tous les tokens (SOL, ETH, SPL), la balance est maintenant numérique
+            // S'assurer que token.balance est traité comme un nombre
+            return token.marketData?.price ? Number(token.balance) * token.marketData.price : 0;
         };
 
         switch (sortOption) {
@@ -332,10 +362,10 @@ export default function DashboardPage() {
                 break;
             case 'price':
                 const aPrice = a.type === 'NFT_COLLECTION' 
-                    ? (a.marketData?.price || 0) * 380.23
+                    ? (a.marketData?.price || 0) * 380.23 // Approximation pour NFTs
                     : (a.marketData?.price || 0);
                 const bPrice = b.type === 'NFT_COLLECTION'
-                    ? (b.marketData?.price || 0) * 380.23
+                    ? (b.marketData?.price || 0) * 380.23 // Approximation pour NFTs
                     : (b.marketData?.price || 0);
                 comparison = bPrice - aPrice;
                 break;
@@ -346,15 +376,7 @@ export default function DashboardPage() {
                 break;
         }
         return sortDirection === 'asc' ? -comparison : comparison;
-    }).map(token => {
-        if (token.type === 'NATIVE' && token.symbol === 'SOL') {
-            return {
-                ...token,
-                displayBalance: formatTokenBalance(token.balance, 9, 'SOL')
-            };
-        }
-        return token;
-    });
+    }); // Supprimer le .map final qui reformattait SOL
   }, [getTokenSummary, searchQuery, sortOption, sortDirection]);
 
   // Fonction pour exporter les tokens en CSV
@@ -528,11 +550,16 @@ export default function DashboardPage() {
         // Calculer la valeur des tokens
         const tokensTotal = wallet.balance.balances.reduce((walletTotal, token) => {
             if (token.marketData?.price) {
-                const balance = token.type === 'NATIVE' && token.symbol === 'SOL'
-                    ? Number(token.balance)
-                    : Number(token.balance) / Math.pow(10, Number(token.decimals || 18));
+                let balance;
+                // Pour les tokens natifs (SOL et ETH)
+                if (token.type === 'NATIVE' && (token.symbol === 'SOL' || token.symbol === 'ETH')) {
+                    balance = Number(token.balance) / Math.pow(10, token.symbol === 'SOL' ? 9 : 18);
+                } 
+                // Pour les autres tokens, utiliser la valeur brute
+                else {
+                    balance = Number(token.balance);
+                }
                 const value = balance * token.marketData.price;
-                
                 return walletTotal + value;
             }
             return walletTotal;
@@ -560,7 +587,7 @@ export default function DashboardPage() {
             const token = getToken();
             if (!token) return;
 
-            await fetch('https://api.rb-rubydev.fr/api/wallets/portfolio-history', {
+            await fetch('http://localhost:3001/api/wallets/portfolio-history', {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -585,7 +612,7 @@ export default function DashboardPage() {
             const token = getToken();
             if (!token) return;
 
-            const response = await fetch('https://api.rb-rubydev.fr/api/wallets/portfolio-history', {
+            const response = await fetch('http://localhost:3001/api/wallets/portfolio-history', {
                 headers: {
                     'Authorization': `Bearer ${token}`
                 }
@@ -608,21 +635,6 @@ export default function DashboardPage() {
     fetchPortfolioHistory();
   }, []);
 
-  // Fonction pour calculer la valeur d'un wallet
-  const calculateWalletValue = useCallback((wallet: Wallet) => {
-    if (!wallet.balance?.balances) return 0;
-    
-    return wallet.balance.balances.reduce((total, token) => {
-        if (token.marketData?.price) {
-            const balance = token.type === 'NATIVE' && token.symbol === 'SOL'
-                ? Number(token.balance)
-                : Number(token.balance) / Math.pow(10, Number(token.decimals || 18));
-            return total + (balance * token.marketData.price);
-        }
-        return total;
-    }, 0);
-  }, []);
-
   // Fonction pour basculer l'expansion d'un wallet
   const toggleWalletExpansion = (walletId: string) => {
     setExpandedWallets(prev => ({
@@ -643,20 +655,20 @@ export default function DashboardPage() {
   // Composant TokenDistributionChart modifié pour utiliser les valeurs en USD
   const TokenDistributionChartWithValues = useCallback(() => {
     interface TokenData {
-        symbol: string;
-        balance: number;
-        value: number;
-        marketData?: {
-            price: number;
-            percent_change_24h: number;
-            market_cap: number;
-            volume_24h: number;
-        };
+      symbol: string;
+      balance: number;
+      value: number;
+      marketData?: {
+        price: number;
+        percent_change_24h: number;
+        market_cap: number;
+        volume_24h: number;
+      };
       type?: string;
-        percentage: number;
+      percentage: number;
     }
 
-    // Récupérer tous les NFTs
+    // Récupérer les NFTs d'abord
     const nfts = wallets.flatMap(wallet => wallet.balance?.nfts || []);
     const totalNFTs = nfts.length;
     const nftFloorPrice = nfts[0]?.floorPrice || 0;
@@ -680,54 +692,65 @@ export default function DashboardPage() {
       };
     }
 
+    // Récupérer tous les tokens (y compris les SPL)
     const tokens = wallets.flatMap(wallet => 
-        wallet.balance?.balances.map(token => {
-            const balance = token.type === 'NATIVE' && token.symbol === 'SOL'
-                ? Number(token.balance)
-                : Number(token.balance) / Math.pow(10, Number(token.decimals || 18));
-            const value = token.marketData?.price ? balance * token.marketData.price : 0;
+      wallet.balance?.balances.map(token => {
+        // Utiliser la logique de calcul de valeur corrigée
+        let numericBalance = 0;
+        let value = 0;
+        try {
+          if (token.type === 'NATIVE' && token.symbol === 'SOL') {
+            numericBalance = token.rawBalance ? Number(token.rawBalance) / Math.pow(10, 9) : 0;
+          } else if (token.type === 'NATIVE' && token.symbol === 'ETH') {
+            numericBalance = Number(token.balance) / Math.pow(10, 18);
+          } else if (token.type === 'SPL' || token.type === 'ERC20') {
+            numericBalance = Number(token.balance);
+          }
+          value = token.marketData?.price ? numericBalance * token.marketData.price : 0;
+        } catch (e) {
+            console.error("Erreur calcul valeur token pour graphique:", e, token);
+            value = 0;
+        }
             
-           
-            
-            return {
-                symbol: token.symbol,
-                balance,
-                value,
-                marketData: token.marketData,
-                type: token.type,
-                percentage: 0
-            } as TokenData;
-        }) || []
+        return {
+          symbol: token.symbol,
+          balance: numericBalance, // Stocker la balance numérique correcte
+          value, // Utiliser la valeur calculée correcte
+          marketData: token.marketData,
+          type: token.type,
+          percentage: 0
+        } as TokenData;
+      }) || []
     );
 
     // Filtrer les tokens selon l'option includeNFTsInChart
-    const filteredTokens = tokens.filter(token => 
-      includeNFTsInChart ? true : token.type !== 'NFT_COLLECTION'
-    );
-
-    // Ajouter le token NFT si nécessaire
+    let allTokens = [...tokens];
     if (includeNFTsInChart && nftToken) {
-      filteredTokens.push(nftToken);
+      allTokens.push(nftToken);
     }
 
     // Regrouper les tokens par symbole
-    const groupedTokens = filteredTokens.reduce<Record<string, TokenData>>((acc, token) => {
-        const key = token.symbol;
-        if (!acc[key]) {
-            acc[key] = { ...token };
-        } else {
-            acc[key].balance += token.balance;
-            acc[key].value += token.value;
-        }
-        return acc;
+    const groupedTokens = allTokens.reduce<Record<string, TokenData>>((acc, token) => {
+      if (!token) return acc;
+      const key = token.symbol;
+      if (!acc[key]) {
+        acc[key] = { ...token };
+      } else {
+        acc[key].balance += token.balance;
+        acc[key].value += token.value;
+      }
+      return acc;
     }, {});
 
     // Calculer le total et les pourcentages
     const total = Object.values(groupedTokens).reduce((sum, token) => sum + token.value, 0);
-    const tokensWithPercentages = Object.values(groupedTokens).map(token => ({
+    const tokensWithPercentages = Object.values(groupedTokens)
+      .filter(token => token.value > 0) // Ne garder que les tokens avec une valeur
+      .map(token => ({
         ...token,
         percentage: total > 0 ? (token.value / total) * 100 : 0
-    }));
+      }))
+      .sort((a, b) => b.value - a.value); // Trier par valeur décroissante
 
     return <TokenDistributionChart tokens={tokensWithPercentages} />;
   }, [wallets, includeNFTsInChart]);
@@ -755,7 +778,7 @@ export default function DashboardPage() {
       if (!token) return;
 
       // Récupérer les wallets
-      const walletsResponse = await fetch('https://api.rb-rubydev.fr/api/wallets', {
+      const walletsResponse = await fetch('http://localhost:3001/api/wallets', {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -772,7 +795,7 @@ export default function DashboardPage() {
         walletsData.map(async (wallet: Wallet) => {
           try {
             const balanceResponse = await fetch(
-              `https://api.rb-rubydev.fr/api/wallets/balance/${wallet.id}`,
+              `http://localhost:3001/api/wallets/balance/${wallet.id}`,
               {
                 headers: {
                   Authorization: `Bearer ${token}`,
@@ -838,7 +861,7 @@ export default function DashboardPage() {
         const token = getToken();
         if (!token) return;
 
-        const response = await fetch('https://api.rb-rubydev.fr/api/token-ban', {
+        const response = await fetch('http://localhost:3001/api/token-ban', {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -858,52 +881,88 @@ export default function DashboardPage() {
     fetchBannedTokens();
   }, []);
 
-  // Modifier la partie du rendu des tokens dans renderWalletTokens
-  const renderWalletTokens = (wallet: Wallet) => {
+  // Modifier renderWalletTokens pour accepter walletTotal en argument
+  const renderWalletTokens = (wallet: Wallet, walletTotal: number) => {
     if (!wallet.balance?.balances) return null;
 
-    return wallet.balance.balances
-        .filter(token => {
-            const isBanned = bannedTokens.some(bannedToken => 
-                bannedToken.address.toLowerCase() === token.address.toLowerCase()
-            );
-            return !isBanned;
-        })
-        .map((token, index) => {
-            const formattedBalance = formatTokenBalance(token.balance, token.decimals, token.symbol);
-            const tokenValue = token.type === 'NATIVE' && token.symbol === 'SOL'
-                ? Number(token.balance) * (token.marketData?.price || 0)
-                : token.marketData?.price 
-                    ? (Number(token.balance) / Math.pow(10, token.decimals || 18)) * token.marketData.price 
-                    : 0;
-            
-            return (
-                <div key={index} className="p-4 bg-gray-800/50 rounded-lg hover:bg-gray-800/70 transition-colors">
-                    <div className="flex justify-between items-center">
-                        <div>
-                            <h3 className="font-medium">{token.symbol}</h3>
-                            {token.name && (
-                                <p className="text-xs text-gray-400">{token.name}</p>
-                            )}
-                            {token.type === 'ERC20' && (
-                                <p className="text-xs text-gray-500">ERC20</p>
-                            )}
-                            {token.type === 'NATIVE' && (
-                                <p className="text-xs text-gray-500">Native Token</p>
-                            )}
-                        </div>
-                        <div className="text-right">
-                            <p className="font-semibold">
-                                {formattedBalance} {token.symbol}
-                            </p>
-                            <p className="text-xs text-gray-400">
-                                ≈ ${tokenValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </p>
-                        </div>
-                    </div>
+    // Utiliser la valeur passée en argument
+    return (
+        <>
+            {/* Afficher le total du wallet */}
+            <div className="p-4 bg-gray-700/50 rounded-lg mb-4">
+                <div className="flex justify-between items-center">
+                    <span className="text-gray-300">Total du wallet</span>
+                    <span className="text-xl font-bold">
+                        ${walletTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
                 </div>
-            );
-        });
+            </div>
+
+            {/* Liste des tokens */}
+            <div className="space-y-2">
+                {wallet.balance.balances
+                    .filter(token => {
+                        const isBanned = bannedTokens.some(bannedToken => 
+                            bannedToken.address.toLowerCase() === token.address.toLowerCase()
+                        );
+                        return !isBanned;
+                    })
+                    .map((token, index) => {
+                        const formattedBalance = formatTokenBalance(token.balance, token.decimals, token.symbol);
+                        let tokenValue = 0;
+                        
+                        // Simplifier le calcul de la valeur en utilisant token.balance directement
+                        try {
+                          const numericBalance = Number(token.balance); 
+                          if (!isNaN(numericBalance)) {
+                            // token.balance semble contenir la valeur numérique correcte pour SPL/ERC20
+                            tokenValue = numericBalance * (token.marketData?.price || 0);
+                          }
+                        } catch(e) {
+                           console.error("Erreur calcul valeur token individuel:", e, token);
+                           tokenValue = 0; // Assurer 0 en cas d'erreur
+                        }
+                        
+                        return (
+                            <div key={index} className="p-4 bg-gray-800/50 rounded-lg hover:bg-gray-800/70 transition-colors">
+                                <div className="flex justify-between items-center">
+                                    <div>
+                                        <h3 className="font-medium">{token.symbol}</h3>
+                                        {token.name && (
+                                            <p className="text-xs text-gray-400">{token.name}</p>
+                                        )}
+                                        {token.type === 'ERC20' && (
+                                            <p className="text-xs text-gray-500">ERC20</p>
+                                        )}
+                                        {token.type === 'SPL' && (
+                                            <p className="text-xs text-gray-500">SPL Token</p>
+                                        )}
+                                        {token.type === 'NATIVE' && (
+                                            <p className="text-xs text-gray-500">Native Token</p>
+                                        )}
+                                    </div>
+                                    <div className="text-right">
+                                        <div className="flex flex-col items-end">
+                                            <p className="font-semibold">
+                                                {formattedBalance} {token.symbol}
+                                            </p>
+                                            <p className="text-xs text-gray-400">
+                                                ≈ ${tokenValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            </p>
+                                            {token.marketData?.price && (
+                                                <p className="text-xs text-gray-500">
+                                                    Prix actuel: ${token.marketData.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                </p>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })}
+            </div>
+        </>
+    );
   };
 
   return (
@@ -1035,7 +1094,8 @@ export default function DashboardPage() {
                   ) : (
                       wallets.map((wallet) => {
                         const isExpanded = expandedWallets[wallet.id];
-                        const walletValue = calculateWalletValue(wallet);
+                        // Utiliser la nouvelle fonction ici
+                        const walletValue = calculateCorrectWalletValue(wallet);
 
                         return (
                           <div key={wallet.id} className="bg-gray-800/50 rounded-lg overflow-hidden">
@@ -1049,7 +1109,8 @@ export default function DashboardPage() {
                                   <p className="text-sm text-gray-400">{wallet.address}</p>
                                 </div>
                                 <div className="text-right">
-                                  <p className="font-semibold">
+                                  <p className="font-semibold text-lg">
+                                    {/* Afficher la valeur calculée correctement */}
                                     ${walletValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                   </p>
                                 </div>
@@ -1058,7 +1119,8 @@ export default function DashboardPage() {
 
                             {isExpanded && (
                               <div className="border-t border-gray-800 p-4 space-y-2">
-                                {renderWalletTokens(wallet)}
+                                {/* Passer la valeur calculée à renderWalletTokens */}
+                                {renderWalletTokens(wallet, walletValue)}
                               </div>
                             )}
                           </div>
@@ -1161,23 +1223,35 @@ export default function DashboardPage() {
                         </div>
                       ) : (
                         getFilteredAndSortedTokens().map((token, index) => {
+                          // Calculer la valeur du token en USD
                           const tokenValue = token.type === 'NATIVE' && token.symbol === 'SOL'
                             ? Number(token.balance) * (token.marketData?.price || 0)
                             : token.marketData?.price 
-                                ? (Number(token.balance) / Math.pow(10, token.decimals || 18)) * token.marketData.price 
+                                ? Number(token.balance) * token.marketData.price 
                                 : 0;
                           
                           // Calculer le pourcentage avec des vérifications de sécurité
                           let tokenPercentage = 0;
                           if (walletSummary.total > 0 && tokenValue > 0 && isFinite(tokenValue)) {
                               tokenPercentage = (tokenValue / walletSummary.total) * 100;
-                              // S'assurer que le pourcentage est valide et limité
                               tokenPercentage = isFinite(tokenPercentage) ? Math.min(tokenPercentage, 100) : 0;
                           }
 
+                          // Formater la balance selon le type de token
+                          let displayBalance = '';
+                          if (token.type === 'NFT_COLLECTION') {
+                            displayBalance = `${token.balance} NFTs`;
+                          } else if (token.displayBalance) {
+                            displayBalance = `${token.displayBalance} ${token.symbol}`;
+                          } else {
+                            const formattedBalance = token.type === 'NATIVE' && token.symbol === 'SOL'
+                              ? formatTokenBalance(token.balance.toString(), 9, 'SOL')
+                              : formatTokenBalance(token.balance.toString(), token.decimals || 18, token.symbol);
+                            displayBalance = `${formattedBalance} ${token.symbol}`;
+                          }
+
                           return (
-                            <div key={index} 
-                              className="p-4 bg-gray-900/50 rounded-xl hover:bg-gray-800/50 transition-all duration-200">
+                            <div key={index} className="p-4 bg-gray-900/50 rounded-xl hover:bg-gray-800/50 transition-all duration-200">
                               <div className="flex flex-col space-y-2">
                                 <div className="flex items-center justify-between w-full">
                                   <div className="flex items-center space-x-4">
@@ -1185,26 +1259,28 @@ export default function DashboardPage() {
                                       <div className="flex items-center space-x-2">
                                         <h3 className="text-lg font-medium">{token.symbol}</h3>
                                         {token.marketData?.percent_change_24h !== undefined && (
-                                          <span className={`text-xs px-1.5 py-0.5 rounded ${
-                                            token.marketData.percent_change_24h >= 0 
-                                              ? 'bg-green-500/20 text-green-400' 
-                                              : 'bg-red-500/20 text-red-400'
-                                          }`}>
-                                            {token.marketData.percent_change_24h >= 0 ? '+' : ''}
-                                            {formatNumber(token.marketData.percent_change_24h, true)}%
-                                          </span>
+                                         <span className={`text-xs px-1.5 py-0.5 rounded ${
+                                          token.marketData.percent_change_24h >= 0 
+                                            ? 'bg-green-500/20 text-green-400' 
+                                            : 'bg-red-500/20 text-red-400'
+                                        }`}>
+                                          {token.marketData.percent_change_24h >= 0 ? '+' : ''}
+                                          {token.marketData.percent_change_24h.toFixed(2)}%
+                                        </span>
+                                        
+                                          
                                         )}
                                       </div>
                                       <p className="text-sm text-gray-400">{token.name || 'Token'}</p>
+                                      {token.wallets && (
+                                        <p className="text-xs text-blue-400">
+                                          Présent dans {token.wallets.length} wallet{token.wallets.length > 1 ? 's' : ''}
+                                        </p>
+                                      )}
                                     </div>
                                     <div>
                                       <div className="text-lg">
-                                        {token.type === 'NATIVE' && token.symbol === 'SOL'
-                                            ? token.displayBalance
-                                            : token.type === 'NFT_COLLECTION'
-                                                ? `${formatNumber(token.balance)} ${token.symbol}`
-                                                : `${formatTokenBalance(token.balance * Math.pow(10, token.decimals || 18), token.decimals || 18, token.symbol)} ${token.symbol}`
-                                        }
+                                        {displayBalance}
                                       </div>
                                       <div className="flex items-center space-x-2">
                                         <span className="text-lg">
@@ -1219,18 +1295,8 @@ export default function DashboardPage() {
                                       <div className="text-sm text-gray-400">Prix actuel</div>
                                       <div className="flex items-center justify-end space-x-2">
                                         <span className="text-lg">
-                                          ${token.marketData?.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                          ${token.marketData?.price ? formatNumber(token.marketData.price) : 'N/A'}
                                         </span>
-                                        {token.marketData?.usd_change_24h !== undefined && (
-                                          <span className={`text-xs px-1.5 py-0.5 rounded ${
-                                            token.marketData.usd_change_24h >= 0 
-                                              ? 'bg-green-500/20 text-green-400' 
-                                              : 'bg-red-500/20 text-red-400'
-                                          }`}>
-                                            ({token.marketData.usd_change_24h >= 0 ? '+' : ''}
-                                            ${Math.abs(token.marketData.usd_change_24h).toFixed(2)})
-                                          </span>
-                                        )}
                                       </div>
                                     </div>
                                     <div className="text-right">
@@ -1241,13 +1307,7 @@ export default function DashboardPage() {
                                             : tokenPercentage > 0 
                                                 ? '< 0.01' 
                                                 : '0.00'}%
-                                    </div>
-                                    </div>
-                                    <div className="flex items-center text-gray-400">
-                                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                                      </svg>
-                                      <span className="text-xs ml-1">{token.wallets?.length || 0}</span>
+                                      </div>
                                     </div>
                                   </div>
                                 </div>
