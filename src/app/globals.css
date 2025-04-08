@@ -1,0 +1,80 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --foreground-rgb: 255, 255, 255;
+  --background-start-rgb: 0, 0, 0;
+  --background-end-rgb: 0, 0, 0;
+  --primary: #3b82f6;
+  --primary-dark: #2563eb;
+}
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background: linear-gradient(
+      to bottom,
+      transparent,
+      rgb(var(--background-end-rgb))
+    )
+    rgb(var(--background-start-rgb));
+}
+
+@layer base {
+  body {
+    @apply bg-black text-white;
+  }
+}
+
+@layer components {
+  /* Animation de pulse personnalisée */
+  @keyframes subtle-pulse {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 0.3; }
+  }
+
+  .animate-subtle-pulse {
+    animation: subtle-pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  /* Effet de glassmorphisme */
+  .glass {
+    @apply bg-gray-900/30 backdrop-blur-xl border border-gray-800/50;
+  }
+
+  /* Focus styles */
+  .focus-ring {
+    @apply focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-black;
+  }
+
+  /* Input styles */
+  .input-dark {
+    @apply mt-1 block w-full px-3 py-2 bg-gray-900/50 border border-gray-700 rounded-lg 
+    text-white placeholder-gray-400
+    focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+    transition-all duration-200;
+  }
+
+  /* Grille de fond */
+  .grid-bg {
+    background-image: radial-gradient(circle at 1px 1px, rgb(64 64 64 / 0.3) 1px, transparent 0);
+    background-size: 40px 40px;
+  }
+
+  /* Styles pour le graphique */
+  .chart-container {
+    @apply relative h-32 bg-gray-900/50 rounded-lg overflow-hidden;
+  }
+
+  .chart-gradient {
+    background: linear-gradient(180deg, var(--primary) 0%, transparent 100%);
+    opacity: 0.1;
+  }
+}
+
+/* Transitions douces */
+.transition-all {
+  transition-property: all;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}
