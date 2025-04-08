@@ -246,7 +246,7 @@ export default function ProfilePage() {
 
         // Récupérer les informations du profil
         const profileResponse = await fetch(
-          "http://localhost:3001/api/profile",
+          "https://api.rb-rubydev.fr/api/profile",
           {
             headers: {
               Authorization: `Bearer ${token}`,
@@ -286,7 +286,7 @@ export default function ProfilePage() {
         if (!token) return;
 
         const response = await fetch(
-          `http://localhost:3001/api/token-ban?page=${bannedTokensPage}&limit=10&search=${encodeURIComponent(bannedTokensSearch)}`,
+          `https://api.rb-rubydev.fr/api/token-ban?page=${bannedTokensPage}&limit=10&search=${encodeURIComponent(bannedTokensSearch)}`,
           {
             headers: {
               Authorization: `Bearer ${token}`,
@@ -329,7 +329,7 @@ export default function ProfilePage() {
         return;
       }
 
-      const response = await fetch("http://localhost:3001/api/profile", {
+      const response = await fetch("https://api.rb-rubydev.fr/api/profile", {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -372,7 +372,7 @@ export default function ProfilePage() {
         return;
       }
 
-      const response = await fetch("http://localhost:3001/api/profile", {
+      const response = await fetch("https://api.rb-rubydev.fr/api/profile", {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -409,7 +409,7 @@ export default function ProfilePage() {
         return;
       }
 
-      const response = await fetch("http://localhost:3001/api/profile", {
+      const response = await fetch("https://api.rb-rubydev.fr/api/profile", {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -455,7 +455,7 @@ export default function ProfilePage() {
 
         console.log('Ajout de la clé API:', { service, key: newApiKey.key }); // Debug
 
-        const response = await fetch('http://localhost:3001/api/keys', {
+        const response = await fetch('https://api.rb-rubydev.fr/api/keys', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -525,7 +525,7 @@ export default function ProfilePage() {
         }
 
         // Envoyer uniquement le service au backend
-        const response = await fetch(`http://localhost:3001/api/keys/${service}`, {
+        const response = await fetch(`https://api.rb-rubydev.fr/api/keys/${service}`, {
             method: 'DELETE',
             headers: {
                 'Authorization': `Bearer ${token}`
@@ -569,7 +569,7 @@ export default function ProfilePage() {
             return;
         }
 
-        const response = await fetch("http://localhost:3001/api/wallets", {
+        const response = await fetch("https://api.rb-rubydev.fr/api/wallets", {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
@@ -618,7 +618,7 @@ export default function ProfilePage() {
         return;
       }
 
-      const response = await fetch(`http://localhost:3001/api/wallets/${id}`, {
+      const response = await fetch(`https://api.rb-rubydev.fr/api/wallets/${id}`, {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -650,7 +650,7 @@ export default function ProfilePage() {
       const token = getToken();
       if (!token) return;
 
-      const response = await fetch('http://localhost:3001/api/token-ban', {
+      const response = await fetch('https://api.rb-rubydev.fr/api/token-ban', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -691,7 +691,7 @@ export default function ProfilePage() {
       const token = getToken();
       if (!token) return;
 
-      const response = await fetch(`http://localhost:3001/api/token-ban/${id}`, {
+      const response = await fetch(`https://api.rb-rubydev.fr/api/token-ban/${id}`, {
         method: 'DELETE',
         headers: {
           Authorization: `Bearer ${token}`,
