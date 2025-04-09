@@ -53,7 +53,7 @@ export default function AdminDashboard() {
           return;
         }
 
-        const response = await fetch('https://api.rb-rubydev.fr//api/auth/verify', {
+        const response = await fetch('http://localhost:8080//api/auth/verify', {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -84,7 +84,7 @@ export default function AdminDashboard() {
         };
 
         // Récupération des données utilisateurs séparément pour déboguer
-        const usersRes = await fetch('https://api.rb-rubydev.fr//api/admin/users', { headers });
+        const usersRes = await fetch('http://localhost:8080//api/admin/users', { headers });
         if (!usersRes.ok) {
           throw new Error('Erreur lors de la récupération des utilisateurs');
         }
@@ -101,9 +101,9 @@ export default function AdminDashboard() {
 
         // Récupération des autres données
         const [statsRes, walletsRes, historyRes] = await Promise.all([
-          fetch('https://api.rb-rubydev.fr//api/admin/stats/system', { headers }),
-          fetch('https://api.rb-rubydev.fr//api/admin/wallets', { headers }),
-          fetch('https://api.rb-rubydev.fr//api/admin/portfolio-history', { headers })
+          fetch('http://localhost:8080//api/admin/stats/system', { headers }),
+          fetch('http://localhost:8080//api/admin/wallets', { headers }),
+          fetch('http://localhost:8080//api/admin/portfolio-history', { headers })
         ]);
 
         const [stats, wallets, history] = await Promise.all([

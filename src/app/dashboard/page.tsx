@@ -587,7 +587,7 @@ export default function DashboardPage() {
             const token = getToken();
             if (!token) return;
 
-            await fetch('https://api.rb-rubydev.fr//api/wallets/portfolio-history', {
+            await fetch('http://localhost:8080//api/wallets/portfolio-history', {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -612,7 +612,7 @@ export default function DashboardPage() {
             const token = getToken();
             if (!token) return;
 
-            const response = await fetch('https://api.rb-rubydev.fr//api/wallets/portfolio-history', {
+            const response = await fetch('http://localhost:8080//api/wallets/portfolio-history', {
                 headers: {
                     'Authorization': `Bearer ${token}`
                 }
@@ -778,7 +778,7 @@ export default function DashboardPage() {
       if (!token) return;
 
       // Récupérer les wallets
-      const walletsResponse = await fetch('https://api.rb-rubydev.fr//api/wallets', {
+      const walletsResponse = await fetch('http://localhost:8080//api/wallets', {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -795,7 +795,7 @@ export default function DashboardPage() {
         walletsData.map(async (wallet: Wallet) => {
           try {
             const balanceResponse = await fetch(
-              `https://api.rb-rubydev.fr//api/wallets/balance/${wallet.id}`,
+              `http://localhost:8080//api/wallets/balance/${wallet.id}`,
               {
                 headers: {
                   Authorization: `Bearer ${token}`,
@@ -861,7 +861,7 @@ export default function DashboardPage() {
         const token = getToken();
         if (!token) return;
 
-        const response = await fetch('https://api.rb-rubydev.fr//api/token-ban', {
+        const response = await fetch('http://localhost:8080//api/token-ban', {
           headers: {
             Authorization: `Bearer ${token}`,
           },
