@@ -217,7 +217,7 @@ export default function DocumentationPage() {
 
       return (
         <Image
-          src="/Supported/default.png"
+          src="/logos/logoWithoutTxt.png"
           alt={chainName}
           width={64}
           height={64}
