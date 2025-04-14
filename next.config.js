@@ -8,4 +8,9 @@ const nextConfig = {
     ];
     return config;
   },
+  images: {
+    domains: ['cryptorubyx.rb-rubydev.fr'],
+    unoptimized: true,
+  },
+  basePath: process.env.NODE_ENV === 'production' ? '/my-node-app' : '',
 }

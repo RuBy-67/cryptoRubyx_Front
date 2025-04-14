@@ -213,14 +213,14 @@ export default function DocumentationPage() {
 
     const ChainImage = ({ chainName }: { chainName: string }) => {
       const [imageError, setImageError] = useState(false);
+      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || '';
+      const imagePath = imageError
+        ? `${baseUrl}/Supported/default.png`
+        : `${baseUrl}/Supported/${chainName.toLowerCase().replace(" ", "-")}.png`;
 
       return (
         <Image
-          src={
-            imageError
-              ? "/supported/default.png"
-              : `/supported/${chainName.toLowerCase()}.png`
-          }
+          src={imagePath}
           alt={chainName}
           width={64}
           height={64}
