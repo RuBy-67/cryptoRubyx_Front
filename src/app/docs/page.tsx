@@ -217,7 +217,7 @@ export default function DocumentationPage() {
 
       return (
         <Image
-          src={`/Supported/${chainName.toLowerCase()}.png`}
+          src="/Supported/default.png"
           alt={chainName}
           width={64}
           height={64}
