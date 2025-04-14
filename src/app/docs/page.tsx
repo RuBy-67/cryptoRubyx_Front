@@ -211,22 +211,6 @@ export default function DocumentationPage() {
   const renderChainGrid = () => {
     if (activeSection !== "supported-wallets") return null;
 
-    const ChainImage = ({ chainName }: { chainName: string }) => {
-      const [imageError, setImageError] = useState(false);
-
-
-      return (
-        <Image
-          src="/logos/logoWithoutTxt.png"
-          alt={chainName}
-          width={64}
-          height={64}
-          className="rounded-full"
-          onError={() => setImageError(true)}
-          priority
-        />
-      );
-    };
 
     return (
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mt-8">
@@ -236,7 +220,7 @@ export default function DocumentationPage() {
             className="glass p-4 rounded-xl flex flex-col items-center text-center"
           >
             <div className="w-16 h-16 mb-3">
-              <ChainImage chainName={chain.name} />
+              <Image src={`/Supported/${chain.name.toLowerCase()}.png`} alt='logo' width={64} height={64} />
             </div>
             <h3 className="font-medium text-white">{chain.name}</h3>
             <p className="text-sm text-gray-400 mt-1">{chain.description}</p>
