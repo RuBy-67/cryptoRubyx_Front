@@ -6,7 +6,18 @@ export function middleware(request: NextRequest) {
   const token = request.cookies.get('token')?.value;
 
   // Liste des chemins publics qui ne nécessitent pas d'authentification
-  const publicPaths = ['/', '/register', '/login', '/forgot-password'];
+  const publicPaths = [
+    '/', 
+    '/register', 
+    '/login', 
+    '/forgot-password',
+    '/whats-new',
+    '/docs',
+    '/legal/terms',
+    '/legal/privacy'
+  ];
+  
+  // Vérifier si le chemin actuel est public
   const isPublicPath = publicPaths.some(path => request.nextUrl.pathname === path);
 
   // Si l'utilisateur n'est pas connecté et essaie d'accéder à une page protégée
