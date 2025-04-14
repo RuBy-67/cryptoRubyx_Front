@@ -225,6 +225,8 @@ export default function DocumentationPage() {
                 alt={chain.name}
                 width={64} 
                 height={64}
+                priority
+                loading="eager"
                 onError={(e) => {
                   const target = e.target as HTMLImageElement;
                   target.src = '/Supported/default.png';
