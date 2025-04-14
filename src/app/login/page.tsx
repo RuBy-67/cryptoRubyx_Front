@@ -18,7 +18,7 @@ export default function LoginPage() {
     setError('');
 
     try {
-      const response = await fetch('https://api.rb-rubydev.fr//api/auth/login', {
+      const response = await fetch('https://api.rb-rubydev.fr/api/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -128,9 +128,12 @@ export default function LoginPage() {
 
             <div className="text-center text-sm">
               <span className="text-gray-400">Pas encore de compte ?</span>{' '}
-              <Link href="/register" className="text-blue-500 hover:text-blue-400 font-medium">
+              <span className="text-red-500 font-medium cursor-not-allowed" title="Service temporairement indisponible">
                 Créer un compte
-              </Link>
+              </span>
+              <div className="mt-2 text-xs text-red-500 bg-red-500/10 border border-red-500/20 rounded-lg p-2">
+                Service temporairement indisponible : Manque de ressources
+              </div>
             </div>
           </form>
 
