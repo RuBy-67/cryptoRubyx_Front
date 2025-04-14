@@ -218,8 +218,8 @@ export default function DocumentationPage() {
         <Image
           src={
             imageError
-              ? "/Supported/default.png"
-              : `/Supported/${chainName.toLowerCase()}.png`
+              ? "/supported/default.png"
+              : `/supported/${chainName.toLowerCase()}.png`
           }
           alt={chainName}
           width={64}
