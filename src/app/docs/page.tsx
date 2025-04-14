@@ -220,18 +220,7 @@ export default function DocumentationPage() {
             className="glass p-4 rounded-xl flex flex-col items-center text-center"
           >
             <div className="w-16 h-16 mb-3">
-              <Image 
-                src={`/Supported/${chain.name.toLowerCase().replace(/\s+/g, ' ').trim()}.png`} 
-                alt={chain.name}
-                width={64} 
-                height={64}
-                priority
-                loading="eager"
-                onError={(e) => {
-                  const target = e.target as HTMLImageElement;
-                  target.src = '/Supported/default.png';
-                }}
-              />
+              <Image src={`/Supported/${chain.name.toLowerCase()}.png`} alt='logo' width={64} height={64} />
             </div>
             <h3 className="font-medium text-white">{chain.name}</h3>
             <p className="text-sm text-gray-400 mt-1">{chain.description}</p>

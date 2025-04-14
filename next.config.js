@@ -11,16 +11,6 @@ const nextConfig = {
   images: {
     domains: ['cryptorubyx.rb-rubydev.fr'],
     unoptimized: true,
-    remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: '**',
-      },
-    ],
   },
-  trailingSlash: true,
-  output: 'standalone',
-  poweredByHeader: false,
+  basePath: process.env.NODE_ENV === 'production' ? '/my-node-app' : '',
 }
-
-module.exports = nextConfig
